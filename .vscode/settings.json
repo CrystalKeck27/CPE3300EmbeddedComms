@@ -1,0 +1,9 @@
+{
+    "cSpell.words": [
+        "eabi",
+        "newlib",
+        "pacman"
+    ],
+    "C_Cpp.default.cStandard": "gnu11",
+    "stm32-for-vscode.openOCDPath": false
+}
