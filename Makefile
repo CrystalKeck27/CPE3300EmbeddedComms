@@ -1,4 +1,4 @@
-PROJECT_NAME := $(shell basename $(CURDIR))
+PROJECT_NAME := CPE3300EmbeddedComms
 BUILD_RESOURCES_DIR := Debug/resources
 OBJ_DIR := Debug/Obj
 
@@ -20,12 +20,12 @@ STARTUP_SRC := $(BUILD_RESOURCES_DIR)/startup_stm32f411retx.s
 all: $(BUILD_ARTIFACT)
 
 obj_dir:
-	mkdir -p Debug/Obj
+	if not exist "$(OBJ_DIR)" mkdir $(OBJ_DIR)
 
 $(OBJ_S): $(STARTUP_SRC) obj_dir
 	$(CC) -mcpu=cortex-m4 -g3 -DDEBUG -c -x assembler-with-cpp -MMD -MP -MF"$(OBJ_DIR)/startup_stm32f411retx.d" -MT"$(OBJ_DIR)/startup_stm32f411retx.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "$(OBJ_DIR)/startup_stm32f411retx.o" "$(STARTUP_SRC)"
 
-Debug/Obj/%.o: Src/%.c $(DEPS) obj_dir
+$(OBJ_DIR)/%.o: Src/%.c $(DEPS) obj_dir
 	$(CC) "$<" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DNUCLEO_F411RE -DSTM32 -DSTM32F4 -DSTM32F411RETx -c -I../Inc -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -MMD -MP -MF"$(@:%.o=%.d)" -MT"$@" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "$@"
 
 $(BUILD_ARTIFACT) $(BUILD_ARTIFACT_NAME).map: $(OBJ) $(OBJ_S)
