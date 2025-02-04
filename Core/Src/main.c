@@ -38,6 +38,7 @@ typedef enum
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define DELAY 1110
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -110,18 +111,21 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  	HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_RESET);
-	  	HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
-	  	HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_RESET);
 		switch (curr_state) {
 		case IDLE:
 			HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
+		  	HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_RESET);
+		  	HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
 			break;
 		case BUSY:
 			HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_SET);
+		  	HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_RESET);
+		  	HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_RESET);
 			break;
 		case COLLISION:
 			HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_SET);
+		  	HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_RESET);
+		  	HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
 			break;
 		default:
 			break;
@@ -223,7 +227,7 @@ static void MX_TIM4_Init(void)
   {
     Error_Handler();
   }
-  sConfigOC.OCMode = TIM_OCMODE_ACTIVE;
+  sConfigOC.OCMode = TIM_OCMODE_TIMING;
   sConfigOC.Pulse = 1110;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
@@ -231,6 +235,7 @@ static void MX_TIM4_Init(void)
   {
     Error_Handler();
   }
+  __HAL_TIM_ENABLE_OCxPRELOAD(&htim4, TIM_CHANNEL_2);
   /* USER CODE BEGIN TIM4_Init 2 */
 
   /* USER CODE END TIM4_Init 2 */
@@ -328,6 +333,10 @@ static void MX_GPIO_Init(void)
 void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef * htim){
 	if (htim->Instance == TIM4) {
 		HAL_TIM_OC_Stop(&htim4, TIM_CHANNEL_2);
+		TIM4->CCR2 = TIM4->CCR1 + DELAY;
+		uint32_t temp = TIM4->CNT;
+		TIM4->EGR |= 0x1;
+		TIM4->CNT = temp;
 		HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_2);
 	    curr_state = BUSY;
 	}
@@ -335,7 +344,7 @@ void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef * htim){
 
 void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
 	if(htim->Instance == TIM4) {
-		if(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6) == 1){
+		if(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6) == GPIO_PIN_SET){
 			curr_state = IDLE;
 		} else{
 			curr_state = COLLISION;
