@@ -38,7 +38,6 @@ typedef enum
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -77,7 +76,6 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-	state_t prev_state;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -102,7 +100,6 @@ int main(void)
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
   curr_state = IDLE;
-  prev_state = curr_state;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -225,8 +222,8 @@ static void MX_TIM4_Init(void)
   {
     Error_Handler();
   }
-  sConfigOC.OCMode = TIM_OCMODE_TIMING;
-  sConfigOC.Pulse = 0;
+  sConfigOC.OCMode = TIM_OCMODE_ACTIVE;
+  sConfigOC.Pulse = 1100;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_OC_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
@@ -329,11 +326,9 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef * htim){
 	if (htim->Instance == TIM4) {
-	    if(curr_state == IDLE){
-	    	curr_state = BUSY;
-	    } else{
-	    	curr_state = BUSY;
-	    }
+		HAL_TIM_OC_Stop(&htim4, TIM_CHANNEL_2);
+		HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_2);
+	    curr_state = BUSY;
 	}
 }
 
