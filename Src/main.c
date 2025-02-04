@@ -18,97 +18,63 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include "encoder.h"
-#include "led_array.h"
+#include "led_bar.h"
+#include "gpio.h"
 #include "lcd.h"
 #include "delay.h"
 #include "rcc.h"
+#include "tim.h"
 
-uint8_t center_on[64] = {
-	0b00000000,
-	0b00000000,
-	0b00010000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00001000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000100,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000100,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00001000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00010000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00100000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00100000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-	0b00000000,
-};
+uint16_t count = 0;
+bool spooj = false;
 
-
+// Control pin = PB0
+// Timer 3 Channel 3 = AF2
 int main(void)
 {
-	EncoderInit();
 	LcdSetup();
 	LcdInit();
 	LcdClear();
-	LedArrayInit();
-	LedArraySend(center_on);
+	LedBar led_bar = LedBarInit();
+	LedBarOn(&led_bar, 0);
+	volatile Gpio *gpio_b = GPIO_B;
+	volatile Tim *tim3 = TIM3;
+	RccEnable(tim3);
+	// Enable pull-up resistor
+	gpio_b->pupdr &= ~(3 << 0);
+	// Set PB0 to alternate function mode
+	gpio_b->moder &= ~(3 << 0);
+	gpio_b->moder |= (2 << 0);
+	// Set PB0 to AF2
+	gpio_b->afrl &= ~(0xF << 0);
+	gpio_b->afrl |= (2 << 0);
 
-	while(1) {
-		uint16_t count = EncoderRead();
-		LedArraySend(&center_on[((count>>2)*8)%64]);
+	// Set up timer 3
+	tim3->arr = 0xFFFFFFFF;
+	tim3->dier |= 0x00000008;
+	tim3->ccmr2 &= ~0xFF;
+	tim3->ccmr2 |= 0x00000001;
+	tim3->ccer |= 0xB00;
+	tim3->cr1 |= 0x00000081;
+	tim3->egr |= 0x0001;
+
+
+	while (1)
+	{
+		count = tim3->cnt;
 		char buffer[16];
 		sprintf(buffer, "Count: %d", count);
 		LcdClear();
 		LcdHome();
 		LcdWriteStr(buffer);
-		DelaySysMilliSec(100);
+		while (!spooj);
+		spooj = false;
 	}
+}
+
+void TIM3_IRQHandler(void)
+{
+	volatile Tim *tim3 = TIM3;
+	// count = tim3->cnt;
+	spooj = true;
 }
