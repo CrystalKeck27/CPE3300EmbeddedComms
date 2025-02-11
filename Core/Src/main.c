@@ -111,6 +111,7 @@ int main(void)
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   curr_state = IDLE;
+  HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET); //SET IDLE
   HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
   /* USER CODE END 2 */
@@ -122,13 +123,14 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  printf("Message:\n");
-	  fgets(input, LEN, stdin);
-	  size = strlen(input) - 1;
-	  curr_index = 0;
-	  curr_char = input[curr_index];
+
 		switch (curr_state) {
 		case IDLE:
+			printf("Message:\n");
+			fgets(input, LEN, stdin);
+			size = strlen(input) - 1;
+			curr_index = 0;
+			curr_char = input[curr_index];
 			HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
 			HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
 		  	HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_RESET);
@@ -418,15 +420,15 @@ void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
 		}
 	}
 	if(htim->Instance == TIM3){
-		if(curr_state == IDLE && curr_index < size){
+		if(curr_state != COLLISION && curr_index < size){
 			if(phase == 0){
-				if(((curr_char>>(7-curr_bit)) & 1) == 1){
+				if((( ((uint8_t)curr_char) >>(7-curr_bit)) & 1) == 1){
 					HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
 				} else{
 					HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
 				}
 			} else{
-				if (((curr_char>>(7-curr_bit)) & 1) == 1) {
+				if((( ((uint8_t)curr_char) >>(7-curr_bit)) & 1) == 1){
 					HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
 				} else {
 					HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
@@ -443,6 +445,7 @@ void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
 			curr_char = input[curr_index];
 			if(curr_index >= size){
 				HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+				HAL_TIM_OC_Stop(&htim3, TIM_CHANNEL_1);
 			}
 		}
 	}
