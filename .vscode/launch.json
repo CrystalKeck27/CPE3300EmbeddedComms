@@ -11,6 +11,7 @@
       "runtimeArgs": ["dap-server"],
       //!MODIFY
       "chip": "STM32F411RETx",
+      "probe": "0483:374b",
       "flashingConfig": {
         "flashingEnabled": true,
         "haltAfterReset": false,

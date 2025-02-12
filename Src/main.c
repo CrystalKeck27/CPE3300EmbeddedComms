@@ -30,6 +30,8 @@
 volatile uint16_t count = 0;
 volatile bool trigger = false;
 volatile bool bad = false;
+volatile uint8_t state = 0;
+volatile uint8_t to_state = 0;
 LedBar led_bar;
 
 // Control pin = PB0
@@ -41,7 +43,7 @@ int main(void)
 	LcdInit();
 	LcdClear();
 	led_bar = LedBarInit();
-	LedBarOn(&led_bar, 0);
+	// LedBarOn(&led_bar, 0);
 	volatile Gpio *gpio_b = GPIO_B;
 	volatile Tim *tim3 = TIM3;
 	RccEnable(tim3);
@@ -56,7 +58,7 @@ int main(void)
 	gpio_b->afrl |= (2 << 0);
 
 	// Set up timer 3
-	tim3->psc = 803;
+	tim3->psc = 16;
 	tim3->arr = 0xFFFFFFFF;
 	tim3->dier |= 0x00000008;
 	tim3->ccmr2 = 0x0000000000000001;
@@ -68,7 +70,6 @@ int main(void)
 
 	while (1)
 	{
-		// count = tim3->cnt;
 		char buffer[16];
 		sprintf(buffer, "Count: %d", count);
 		LcdClear();
@@ -80,10 +81,11 @@ int main(void)
 		printf("X: %d\n", count);
 		if (bad)
 		{
-			LedBarOff(&led_bar, 0);
-			LedBarOn(&led_bar, 1);
+			// LedBarOff(&led_bar, 0);
+			// LedBarOn(&led_bar, 1);
 			bad = false;
 		}
+		// LedBarWrite(&led_bar, state);
 	}
 }
 
@@ -95,17 +97,27 @@ void TIM3_IRQHandler(void)
 	if (sr & 0x08)
 	{
 		uint16_t value = tim3->ccr3;
-		value += 11100;
+		value += 1060;
 		tim3->ccr4 = value;
 		tim3->dier |= 0x00000010;
-		LedBarToggle(&led_bar, 5);
+		tim3->sr = ~(1 << 4);
+		volatile Gpio *gpio_b = GPIO_B;
+		uint16_t idr = gpio_b->idr & 1;
+		if (idr) {
+			to_state = 1;
+		} else {
+			to_state = 4;
+		}
+		state = 2;
+		LedBarWrite(&led_bar, state);
 	}
 	else if (sr & 0x10)
 	{
 		bad = true;
-		LedBarToggle(&led_bar, 7);
 		tim3->dier &= ~(1 << 4);
-		tim3->sr &= ~(1 << 4);
+		tim3->sr = ~(1 << 4);
+		state = to_state;
+		LedBarWrite(&led_bar, state);
 	}
 	trigger = true;
 }
