@@ -61,6 +61,7 @@ char curr_char;
 uint8_t curr_bit = 0;
 uint32_t size = 0;
 char input[LEN];
+uint8_t option;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -110,10 +111,21 @@ int main(void)
   MX_TIM4_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+
   curr_state = IDLE;
   HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET); //SET IDLE
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET IDLE
   HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
+  printf("Enter an option\n0: User Message\n1: 0x00\n2: 0x55\n");
+  scanf("%d", &option);
+  if(!(option == 1 || option == 2)){
+	printf("Enter Message:\n");
+	scanf("%s", &input);
+	size = strlen(input) - 1;
+	curr_index = 0;
+	curr_char = input[curr_index];
+  }
+  HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -126,12 +138,11 @@ int main(void)
 
 		switch (curr_state) {
 		case IDLE:
-			printf("Message:\n");
-			fgets(input, LEN, stdin);
-			size = strlen(input) - 1;
-			curr_index = 0;
-			curr_char = input[curr_index];
-			HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
+			if(option == 0){
+				curr_index = 0;
+				curr_char = input[curr_index];
+				HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
+			}
 			HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
 		  	HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_RESET);
 		  	HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
@@ -420,31 +431,37 @@ void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
 		}
 	}
 	if(htim->Instance == TIM3){
-		if(curr_state != COLLISION && curr_index < size){
+		if(curr_index < size){
 			if(phase == 0){
-				if((( ((uint8_t)curr_char) >>(7-curr_bit)) & 1) == 1){
-					HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+				if(option == 1){
+					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+				} else if(option == 2){
+					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+				}else if((( ((uint8_t)curr_char) >>(7-curr_bit)) & 1) == 1){
+					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
 				} else{
-					HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
 				}
 			} else{
-				if((( ((uint8_t)curr_char) >>(7-curr_bit)) & 1) == 1){
-					HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+				if(option == 1){
+					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+				} else if(option == 2){
+					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+				}else if((( ((uint8_t)curr_char) >>(7-curr_bit)) & 1) == 1){
+					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
 				} else {
-					HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
 				}
-			}
-			if(phase == 1){
-				curr_bit++;
+					curr_bit++;
 			}
 			if(curr_bit > 7){
 				curr_bit = 0;
 				curr_index++;
 			}
-			phase &= ~phase;
+			phase = phase == 1 ? 0: 1;
 			curr_char = input[curr_index];
-			if(curr_index >= size){
-				HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+			if(option == 0 && curr_index >= size){
+				HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET TO IDLE
 				HAL_TIM_OC_Stop(&htim3, TIM_CHANNEL_1);
 			}
 		}
