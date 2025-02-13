@@ -115,16 +115,23 @@ int main(void)
   curr_state = IDLE;
   HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET IDLE
-  HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
   printf("Enter an option\n0: User Message\n1: 0x00\n2: 0x55\n");
   scanf("%d", &option);
   if(!(option == 1 || option == 2)){
 	printf("Enter Message:\n");
 	scanf("%s", &input);
-	size = strlen(input) - 1;
+	size = strlen(input);
 	curr_index = 0;
 	curr_char = input[curr_index];
   }
+  if(option == 2){
+	  char* msg = "U"; //0x55
+	  strcpy(input, msg);
+	  size = strlen(input);
+	  curr_index = 0;
+	  curr_char = input[curr_index];
+  }
+  HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
   HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
   /* USER CODE END 2 */
 
@@ -138,7 +145,7 @@ int main(void)
 
 		switch (curr_state) {
 		case IDLE:
-			if(option == 0){
+			if(option != 1 && curr_index >= size){
 				curr_index = 0;
 				curr_char = input[curr_index];
 				HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
@@ -431,23 +438,22 @@ void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
 		}
 	}
 	if(htim->Instance == TIM3){
-		if(curr_index < size){
+		if(option == 1){
 			if(phase == 0){
-				if(option == 1){
-					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
-				} else if(option == 2){
-					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
-				}else if((( ((uint8_t)curr_char) >>(7-curr_bit)) & 1) == 1){
+				HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+			} else{
+				HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+			}
+			phase = phase == 1 ? 0: 1;
+		} else if(curr_index < size){
+			if(phase == 0){
+				if((( ((uint8_t)curr_char) >>(7-curr_bit)) & 1) == 1){
 					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
 				} else{
 					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
 				}
 			} else{
-				if(option == 1){
-					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
-				} else if(option == 2){
-					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
-				}else if((( ((uint8_t)curr_char) >>(7-curr_bit)) & 1) == 1){
+				if((( ((uint8_t)curr_char) >>(7-curr_bit)) & 1) == 1){
 					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
 				} else {
 					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
@@ -460,7 +466,7 @@ void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
 			}
 			phase = phase == 1 ? 0: 1;
 			curr_char = input[curr_index];
-			if(option == 0 && curr_index >= size){
+			if(curr_index >= size){
 				HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET TO IDLE
 				HAL_TIM_OC_Stop(&htim3, TIM_CHANNEL_1);
 			}
