@@ -115,7 +115,7 @@ int main(void)
   curr_state = IDLE;
   HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET IDLE
-  printf("Enter an option\n0: User Message\n1: 0x00\n2: 0x55\n");
+  printf("Enter an option\n0: Repeating Message\n1: 0x00\n2: 0x55\n3: Single Message\n");
   scanf("%d", &option);
   if(!(option == 1 || option == 2)){
 	printf("Enter Message:\n");
@@ -145,7 +145,7 @@ int main(void)
 
 		switch (curr_state) {
 		case IDLE:
-			if(option != 1 && curr_index >= size){
+			if(option != 1 && option != 3 && curr_index >= size){
 				curr_index = 0;
 				curr_char = input[curr_index];
 				HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
