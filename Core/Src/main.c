@@ -39,7 +39,7 @@ typedef enum
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define DELAY 1110
-#define HALF_BIT 500
+#define HALF_BIT 700
 #define LEN 255
 /* USER CODE END PD */
 
@@ -65,7 +65,7 @@ uint8_t rec_bit = 0;
 uint32_t rec_index = 0;
 uint32_t size = 0;
 char input[LEN];
-char msg_buff[LEN];
+char msg_buff[LEN] = "";
 uint8_t option;
 uint8_t curr_level;
 uint8_t prev_level = 1;
@@ -128,6 +128,7 @@ int main(void)
   HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET IDLE
   printf("%c\n", 0x00);
+  printf("%c\n", ' ');
   printf("Enter an option\n0: Repeating Message\n1: 0x00\n2: 0x55\n3: Single Message\n4: Receive Mode\n");
   scanf("%d", &option);
   if(!(option == 1 || option == 2 || option == 4)){
