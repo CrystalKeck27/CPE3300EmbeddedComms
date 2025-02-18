@@ -39,6 +39,7 @@ typedef enum
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define DELAY 1110
+#define HALF_BIT 500
 #define LEN 255
 /* USER CODE END PD */
 
@@ -70,6 +71,7 @@ uint8_t curr_level;
 uint8_t prev_level = 1;
 uint32_t last_edge = 0;
 bool first_edge = true;
+bool print_msg = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -125,9 +127,10 @@ int main(void)
   curr_state = IDLE;
   HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET IDLE
+  printf("%c\n", 0x00);
   printf("Enter an option\n0: Repeating Message\n1: 0x00\n2: 0x55\n3: Single Message\n4: Receive Mode\n");
   scanf("%d", &option);
-  if(!(option == 1 || option == 2)){
+  if(!(option == 1 || option == 2 || option == 4)){
 	printf("Enter Message:\n");
 	scanf("%s", &input);
 	size = strlen(input);
@@ -154,8 +157,9 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	  if(option == 4){
-			if (strchr(msg_buff, '\n') != NULL) {
-				printf("%s", msg_buff);
+			if (print_msg) {
+				printf("%s\n", msg_buff);
+				print_msg = false;
 				rec_index = 0;
 				rec_bit = 0;
 				uint8_t prev_level = 1;
@@ -499,7 +503,7 @@ void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef * htim){
 	if(htim->Instance == TIM2){
 		uint32_t curr_edge = TIM2->CCR1;
 		int diff = abs((int)curr_edge - (int)last_edge);
-		if(first_edge || diff > 500){
+		if(first_edge || diff > HALF_BIT){
 			curr_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
 			if (curr_level > prev_level) { // 1
 				msg_buff[rec_index] = (msg_buff[rec_index] << 0x1) | 0x1;
@@ -508,10 +512,12 @@ void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef * htim){
 			}
 			rec_bit++;
 			if (rec_bit > 7) {
+				print_msg = true;
 				rec_bit = 0;
 				rec_index++;
 			}
 			last_edge = curr_edge;
+			prev_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
 		} else{
 			prev_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
 		}
