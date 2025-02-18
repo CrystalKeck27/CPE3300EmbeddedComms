@@ -127,9 +127,7 @@ int main(void)
   curr_state = IDLE;
   HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET IDLE
-  printf("%c\n", 0x00);
-  printf("%c\n", ' ');
-  printf("Enter an option\n0: Repeating Message\n1: 0x00\n2: 0x55\n3: Single Message\n4: Receive Mode\n");
+  printf("Enter an option\n0: Repeating Message\n1: 0x00\n2: 0x55\n3: Single Message\n4: Receive Mode\n5: T-R\n");
   scanf("%d", &option);
   if(!(option == 1 || option == 2 || option == 4)){
 	printf("Enter Message:\n");
@@ -157,7 +155,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  if(option == 4){
+	  if(option == 4 || option == 5){
 			if (print_msg) {
 				printf("%s\n", msg_buff);
 				print_msg = false;
@@ -171,7 +169,7 @@ int main(void)
 	  }
 		switch (curr_state) {
 		case IDLE:
-			if(option != 1 && option != 3 && curr_index >= size){
+			if(option != 1 && option != 3 && option != 4 && option != 5 && curr_index >= size){
 				curr_index = 0;
 				curr_char = input[curr_index];
 				HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
@@ -504,7 +502,8 @@ void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef * htim){
 	if(htim->Instance == TIM2){
 		uint32_t curr_edge = TIM2->CCR1;
 		int diff = abs((int)curr_edge - (int)last_edge);
-		if(first_edge || diff > HALF_BIT){
+		if((first_edge && (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == 0)) || diff > HALF_BIT){
+			first_edge = false;
 			curr_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
 			if (curr_level > prev_level) { // 1
 				msg_buff[rec_index] = (msg_buff[rec_index] << 0x1) | 0x1;
@@ -522,7 +521,6 @@ void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef * htim){
 		} else{
 			prev_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
 		}
-		first_edge = false;
 	}
 }
 
