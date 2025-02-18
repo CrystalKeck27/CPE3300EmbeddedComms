@@ -56,12 +56,18 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 state_t curr_state;
 uint8_t phase = 0;
+uint8_t rec_phase = 0;
 uint32_t curr_index = 0;
 char curr_char;
 uint8_t curr_bit = 0;
+uint8_t rec_bit = 0;
+uint32_t rec_index = 0;
 uint32_t size = 0;
 char input[LEN];
+char msg_buff[LEN];
 uint8_t option;
+uint8_t curr_level;
+uint8_t prev_level;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -115,7 +121,7 @@ int main(void)
   curr_state = IDLE;
   HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET IDLE
-  printf("Enter an option\n0: Repeating Message\n1: 0x00\n2: 0x55\n3: Single Message\n");
+  printf("Enter an option\n0: Repeating Message\n1: 0x00\n2: 0x55\n3: Single Message\n4: Receive Mode\n");
   scanf("%d", &option);
   if(!(option == 1 || option == 2)){
 	printf("Enter Message:\n");
@@ -142,7 +148,13 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
+	  if(option == 4){
+		  printf("%s", msg_buff);
+		  rec_index = 0;
+		  rec_bit = 0;
+		  char* temp = "";
+		  strcpy(msg_buff, temp);
+	  }
 		switch (curr_state) {
 		case IDLE:
 			if(option != 1 && option != 3 && curr_index >= size){
@@ -232,6 +244,7 @@ static void MX_TIM3_Init(void)
 
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_OC_InitTypeDef sConfigOC = {0};
+  TIM_IC_InitTypeDef sConfigIC = {0};
 
   /* USER CODE BEGIN TIM3_Init 1 */
 
@@ -246,6 +259,10 @@ static void MX_TIM3_Init(void)
   {
     Error_Handler();
   }
+  if (HAL_TIM_IC_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
@@ -257,6 +274,14 @@ static void MX_TIM3_Init(void)
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_OC_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_BOTHEDGE;
+  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+  sConfigIC.ICFilter = 0;
+  if (HAL_TIM_IC_ConfigChannel(&htim3, &sConfigIC, TIM_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -427,6 +452,24 @@ void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef * htim){
 		HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_2);
 	    curr_state = BUSY;
 	}
+	if(htim->Instance == TIM3){
+			if(rec_phase == 0){
+				prev_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_7);
+			} else{
+				curr_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_7);
+				if(curr_level > prev_level){ // 1
+					msg_buff[rec_index] = (msg_buff[rec_index] << 0x1)|0x1;
+				} else{ // 0
+					msg_buff[rec_index] = msg_buff[rec_index] << 0x1;
+				}
+				rec_bit++;
+				if(rec_bit > 7){
+					rec_bit = 0;
+					rec_index++;
+				}
+			}
+			rec_phase ^= 1;
+		}
 }
 
 void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
