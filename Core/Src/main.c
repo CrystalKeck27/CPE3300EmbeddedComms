@@ -48,6 +48,7 @@ typedef enum
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 
@@ -56,7 +57,6 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 state_t curr_state;
 uint8_t phase = 0;
-uint8_t rec_phase = 0;
 uint32_t curr_index = 0;
 char curr_char;
 uint8_t curr_bit = 0;
@@ -67,7 +67,9 @@ char input[LEN];
 char msg_buff[LEN];
 uint8_t option;
 uint8_t curr_level;
-uint8_t prev_level;
+uint8_t prev_level = 1;
+uint32_t last_edge = 0;
+bool first_edge = true;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -76,6 +78,7 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -116,6 +119,7 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM4_Init();
   MX_TIM3_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
   curr_state = IDLE;
@@ -138,6 +142,7 @@ int main(void)
 	  curr_char = input[curr_index];
   }
   HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
+  HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
   HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
   /* USER CODE END 2 */
 
@@ -149,11 +154,15 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	  if(option == 4){
-		  printf("%s", msg_buff);
-		  rec_index = 0;
-		  rec_bit = 0;
-		  char* temp = "";
-		  strcpy(msg_buff, temp);
+			if (strchr(msg_buff, '\n') != NULL) {
+				printf("%s", msg_buff);
+				rec_index = 0;
+				rec_bit = 0;
+				uint8_t prev_level = 1;
+				bool first_edge = true;
+				char *temp = "";
+				strcpy(msg_buff, temp);
+			}
 	  }
 		switch (curr_state) {
 		case IDLE:
@@ -231,6 +240,54 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_IC_InitTypeDef sConfigIC = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 83;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 4294967295;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_IC_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_BOTHEDGE;
+  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+  sConfigIC.ICFilter = 0;
+  if (HAL_TIM_IC_ConfigChannel(&htim2, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
   * @brief TIM3 Initialization Function
   * @param None
   * @retval None
@@ -244,7 +301,6 @@ static void MX_TIM3_Init(void)
 
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_OC_InitTypeDef sConfigOC = {0};
-  TIM_IC_InitTypeDef sConfigIC = {0};
 
   /* USER CODE BEGIN TIM3_Init 1 */
 
@@ -259,10 +315,6 @@ static void MX_TIM3_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_TIM_IC_Init(&htim3) != HAL_OK)
-  {
-    Error_Handler();
-  }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
@@ -274,14 +326,6 @@ static void MX_TIM3_Init(void)
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_OC_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_BOTHEDGE;
-  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
-  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
-  sConfigIC.ICFilter = 0;
-  if (HAL_TIM_IC_ConfigChannel(&htim3, &sConfigIC, TIM_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -452,24 +496,27 @@ void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef * htim){
 		HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_2);
 	    curr_state = BUSY;
 	}
-	if(htim->Instance == TIM3){
-			if(rec_phase == 0){
-				prev_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_7);
-			} else{
-				curr_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_7);
-				if(curr_level > prev_level){ // 1
-					msg_buff[rec_index] = (msg_buff[rec_index] << 0x1)|0x1;
-				} else{ // 0
-					msg_buff[rec_index] = msg_buff[rec_index] << 0x1;
-				}
-				rec_bit++;
-				if(rec_bit > 7){
-					rec_bit = 0;
-					rec_index++;
-				}
+	if(htim->Instance == TIM2){
+		uint32_t curr_edge = TIM2->CCR1;
+		int diff = abs((int)curr_edge - (int)last_edge);
+		if(first_edge || diff > 500){
+			curr_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
+			if (curr_level > prev_level) { // 1
+				msg_buff[rec_index] = (msg_buff[rec_index] << 0x1) | 0x1;
+			} else { // 0
+				msg_buff[rec_index] = msg_buff[rec_index] << 0x1;
 			}
-			rec_phase ^= 1;
+			rec_bit++;
+			if (rec_bit > 7) {
+				rec_bit = 0;
+				rec_index++;
+			}
+			last_edge = curr_edge;
+		} else{
+			prev_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
 		}
+		first_edge = false;
+	}
 }
 
 void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
