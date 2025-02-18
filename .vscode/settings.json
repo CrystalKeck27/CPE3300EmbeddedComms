@@ -11,6 +11,7 @@
         "gpio.h": "c",
         "delay.h": "c",
         "rcc.h": "c",
-        "tim.h": "c"
+        "tim.h": "c",
+        "stdint.h": "c"
     }
 }

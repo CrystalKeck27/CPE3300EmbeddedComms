@@ -27,23 +27,33 @@
 #include "interrupt.h"
 #include "uart_driver.h"
 
+bool transmit();
+void start_transmitting();
+void stop_transmitting();
+uint16_t to_manchester(uint8_t data);
+
 volatile uint16_t count = 0;
 volatile bool trigger = false;
 volatile bool bad = false;
 volatile uint8_t state = 0;
 volatile uint8_t to_state = 0;
 LedBar led_bar;
+volatile uint16_t manchester = 0x5555;
+volatile uint16_t progress_mask = 1;
+volatile bool stop_next = false;
+volatile char buffer[16];
+volatile uint8_t buffer_position;
+volatile bool infinite = false;
+
+#define HALF_BIT_PERIOD 470
 
 // Control pin = PB0
 // Timer 3 Channel 3 = AF2
+// Transmitting pin = PA0
 int main(void)
 {
-	init_usart2(57600, 16000000);
-	LcdSetup();
-	LcdInit();
-	LcdClear();
-	led_bar = LedBarInit();
 	// LedBarOn(&led_bar, 0);
+	volatile Gpio *gpio_a = GPIO_A;
 	volatile Gpio *gpio_b = GPIO_B;
 	volatile Tim *tim3 = TIM3;
 	RccEnable(tim3);
@@ -51,34 +61,72 @@ int main(void)
 	gpio_b->pupdr &= ~(3 << 0);
 	gpio_b->pupdr |= (1 << 0);
 	// Set PB0 to alternate function mode
-	gpio_b->moder &= ~(3 << 0);
-	gpio_b->moder |= (2 << 0);
+	gpio_b->moder &= ~(0x3 << 0);
+	gpio_b->moder |= (MODER_ALTERNATE << 0);
+	// Set PA0 to output mode
+	gpio_a->moder &= ~(0x3 << 0);
+	gpio_a->moder |= (MODER_OUTPUT << 0);
+	gpio_a->bsrr = 0x00000001;
 	// Set PB0 to AF2
 	gpio_b->afrl &= ~(0xF << 0);
 	gpio_b->afrl |= (2 << 0);
+
+
+	init_usart2(57600, 16000000);
+	LcdSetup();
+	LcdInit();
+	LcdClear();
+	manchester = to_manchester(0x55);
+	led_bar = LedBarInit();
+	printf("Select option: \n0: User message\n1: Transmit 0x00\n2: Transmit 0x55\n> ");
+	fgets(buffer, 16, stdin);
+	if (buffer[0] == '0')
+	{
+		printf("Enter message: ");
+		fgets(buffer, 16, stdin);
+		buffer_position = 0;
+		manchester = to_manchester(buffer[buffer_position]);
+	}
+	else if (buffer[0] == '1')
+	{
+		manchester = to_manchester(0x00);
+		infinite = true;
+	}
+	else if (buffer[0] == '2')
+	{
+		manchester = to_manchester(0x55);
+		infinite = true;
+	}
+	else
+	{
+		printf("Invalid option\n");
+		return 1;
+	}
 
 	// Set up timer 3
 	tim3->psc = 16;
 	tim3->arr = 0xFFFFFFFF;
 	tim3->dier |= 0x00000008;
 	tim3->ccmr2 = 0x0000000000000001;
-	tim3->ccer = 0x1B00;
+	tim3->ccer = 0x1B10;
 	tim3->cr1 |= 0x00000081;
 	EnableInterrupt(29);
 	tim3->egr |= 0x0001;
-	printf("Count: %d\n", count);
+	uint16_t idr = gpio_b->idr & 1;
+	if (idr)
+	{
+		start_transmitting();
+	}
 
 	while (1)
 	{
 		char buffer[16];
-		sprintf(buffer, "Count: %d", count);
 		LcdClear();
 		LcdHome();
 		LcdWriteStr(buffer);
 		while (!trigger)
 			;
 		trigger = false;
-		printf("X: %d\n", count);
 		if (bad)
 		{
 			// LedBarOff(&led_bar, 0);
@@ -94,6 +142,32 @@ void TIM3_IRQHandler(void)
 	volatile Tim *tim3 = TIM3;
 
 	uint32_t sr = tim3->sr;
+
+	if (sr & 0x04 && tim3->dier & 0x00000004)
+	{
+		if (stop_next)
+		{
+			stop_next = false;
+			stop_transmitting();
+		}
+		else
+		{
+			tim3->sr = ~(1 << 2);
+			uint16_t now = tim3->ccr2;
+			tim3->ccr2 = now + HALF_BIT_PERIOD;
+			if (transmit() && !infinite)
+			{
+				buffer_position++;
+				char next = buffer[buffer_position];
+				if (next == '\n') {
+					stop_next = true;
+				} else {
+					manchester = to_manchester(next);
+				}
+			}
+		}
+	}
+
 	if (sr & 0x08)
 	{
 		uint16_t value = tim3->ccr3;
@@ -103,9 +177,12 @@ void TIM3_IRQHandler(void)
 		tim3->sr = ~(1 << 4);
 		volatile Gpio *gpio_b = GPIO_B;
 		uint16_t idr = gpio_b->idr & 1;
-		if (idr) {
+		if (idr)
+		{
 			to_state = 1;
-		} else {
+		}
+		else
+		{
 			to_state = 4;
 		}
 		state = 2;
@@ -118,6 +195,77 @@ void TIM3_IRQHandler(void)
 		tim3->sr = ~(1 << 4);
 		state = to_state;
 		LedBarWrite(&led_bar, state);
+		if (state == 1)
+		{
+			start_transmitting();
+		}
+		else if (state == 4)
+		{
+			stop_transmitting();
+		}
 	}
 	trigger = true;
+}
+
+void start_transmitting()
+{
+	if (!infinite) {
+		buffer_position = 0;
+		manchester = to_manchester(buffer[buffer_position]);
+	}
+	volatile Tim *tim3 = TIM3;
+	uint16_t now = tim3->cnt;
+	tim3->ccr2 = now + HALF_BIT_PERIOD;
+	tim3->dier |= 0x00000004;
+	tim3->sr = ~(1 << 2);
+	progress_mask = 1;
+	transmit();
+}
+
+void stop_transmitting()
+{
+	volatile Tim *tim3 = TIM3;
+	tim3->dier &= ~(1 << 2);
+	tim3->sr = ~(1 << 2);
+	volatile Gpio *gpio_a = GPIO_A;
+	gpio_a->bsrr = 0x00000001;
+}
+
+uint16_t to_manchester(uint8_t data)
+{
+	uint16_t manchester = 0;
+	for (int i = 0; i < 8; i++)
+	{
+		manchester <<= 2;
+		if (data & (1 << i))
+		{
+			manchester |= 0x02;
+		}
+		else
+		{
+			manchester |= 0x01;
+		}
+	}
+	return manchester;
+}
+
+bool transmit()
+{
+	volatile Gpio *gpio_a = GPIO_A;
+	uint16_t combined = progress_mask & manchester;
+	if (combined == 0)
+	{
+		gpio_a->bsrr = 0x00010000;
+	}
+	else
+	{
+		gpio_a->bsrr = 0x00000001;
+	}
+	progress_mask <<= 1;
+	if (progress_mask == 0)
+	{
+		progress_mask = 1;
+		return true;
+	}
+	return false;
 }
