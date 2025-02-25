@@ -42,6 +42,7 @@ typedef enum
 #define HALF_BIT 700
 #define LEN 255
 #define NMAX 2000
+#define ADDR 0x28
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -65,8 +66,8 @@ char curr_char;
 uint8_t curr_bit = 0;
 uint8_t rec_bit = 0;
 uint32_t rec_index = 0;
-uint32_t size = 0;
-char input[LEN];
+uint8_t size = 0;
+char input[LEN+6];
 char msg_buff[LEN] = "";
 uint8_t option;
 uint8_t curr_level;
@@ -138,17 +139,17 @@ int main(void)
   HAL_TIM_Base_Stop(&htim5);
   if(!(option == 1 || option == 2 || option == 4)){
 	printf("Enter Message:\n");
-	scanf("%s", &input);
-	size = strlen(input);
+	char msg[LEN];
+	scanf("%s", &msg);
+	size = strlen(msg);
+	input[0] = 0x55;
+	input[1] = ADDR;
+	input[2] = 0xFF;
+	input[3] = size;
+	input[4] = 0x00;
+	strncat(input, msg, LEN);
 	curr_index = 0;
 	curr_char = input[curr_index];
-  }
-  if(option == 2){
-	  char* msg = "U"; //0x55
-	  strcpy(input, msg);
-	  size = strlen(input);
-	  curr_index = 0;
-	  curr_char = input[curr_index];
   }
   HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
   HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
@@ -164,7 +165,7 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	  if(option == 4 || option == 5){
 			if (print_msg) {
-				printf("%c\n", msg_buff[0]);
+				printf("%s\n", msg_buff);
 				print_msg = false;
 				rec_index = 0;
 				rec_bit = 0;
@@ -553,27 +554,38 @@ void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef * htim){
 		HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_2);
 	    curr_state = BUSY;
 	}
-	if(htim->Instance == TIM2){
-		uint32_t curr_edge = TIM2->CCR1;
-		int diff = abs((int)curr_edge - (int)last_edge);
-		if((first_edge && (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == 0)) || diff > HALF_BIT){
-			first_edge = false;
-			curr_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
-			if (curr_level > prev_level) { // 1
-				msg_buff[rec_index] = (msg_buff[rec_index] << 0x1) | 0x1;
-			} else { // 0
-				msg_buff[rec_index] = msg_buff[rec_index] << 0x1;
+	if (htim->Instance == TIM2) {
+		if (!(rec_index > 2 && (msg_buff[2] == ADDR || msg_buff[2] == 0xFF))) {
+			uint32_t curr_edge = TIM2->CCR1;
+			int diff = abs((int) curr_edge - (int) last_edge);
+			if ((first_edge && (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == 0))
+					|| diff > HALF_BIT) {
+				first_edge = false;
+				curr_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
+				if (curr_level > prev_level) { // 1
+					msg_buff[rec_index] = (msg_buff[rec_index] << 0x1) | 0x1;
+				} else { // 0
+					msg_buff[rec_index] = msg_buff[rec_index] << 0x1;
+				}
+				rec_bit++;
+				if (rec_bit > 7) {
+					rec_bit = 0;
+					rec_index++;
+				}
+				last_edge = curr_edge;
+				prev_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
+			} else {
+				prev_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
 			}
-			rec_bit++;
-			if (rec_bit > 7) {
+			if (rec_index > 3 && (rec_index == msg_buff[3])) {
 				print_msg = true;
-				rec_bit = 0;
-				rec_index++;
 			}
-			last_edge = curr_edge;
-			prev_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
-		} else{
-			prev_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
+		} else {
+			memset(msg_buff, 0, LEN);
+			rec_bit = 0;
+			rec_index = 0;
+			first_edge = true;
+			uint8_t prev_level = 1;
 		}
 	}
 }
