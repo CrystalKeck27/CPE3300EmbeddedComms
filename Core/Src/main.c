@@ -41,6 +41,7 @@ typedef enum
 #define DELAY 1110
 #define HALF_BIT 700
 #define LEN 255
+#define NMAX 2000
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -52,6 +53,7 @@ typedef enum
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim5;
 
 UART_HandleTypeDef huart2;
 
@@ -81,6 +83,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -122,13 +125,17 @@ int main(void)
   MX_TIM4_Init();
   MX_TIM3_Init();
   MX_TIM2_Init();
+  MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
 
   curr_state = IDLE;
   HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET IDLE
   printf("Enter an option\n0: Repeating Message\n1: 0x00\n2: 0x55\n3: Single Message\n4: Receive Mode\n5: T-R\n");
+  HAL_TIM_Base_Start(&htim5); // for random number generation
   scanf("%d", &option);
+  srand(TIM5->CNT);
+  HAL_TIM_Base_Stop(&htim5);
   if(!(option == 1 || option == 2 || option == 4)){
 	printf("Enter Message:\n");
 	scanf("%s", &input);
@@ -157,7 +164,7 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	  if(option == 4 || option == 5){
 			if (print_msg) {
-				printf("%s\n", msg_buff);
+				printf("%c\n", msg_buff[0]);
 				print_msg = false;
 				rec_index = 0;
 				rec_bit = 0;
@@ -169,7 +176,7 @@ int main(void)
 	  }
 		switch (curr_state) {
 		case IDLE:
-			if(option != 1 && option != 3 && option != 4 && option != 5 && curr_index >= size){
+			if(option == 0 && curr_index >= size){
 				curr_index = 0;
 				curr_char = input[curr_index];
 				HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
@@ -185,6 +192,8 @@ int main(void)
 			break;
 		case COLLISION:
 			HAL_TIM_OC_Stop(&htim3, TIM_CHANNEL_1);
+			TIM5->ARR = (rand() % NMAX) + 1;
+			HAL_TIM_Base_Start_IT(&htim5);
 			HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_SET);
 		  	HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_RESET);
 		  	HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
@@ -403,6 +412,51 @@ static void MX_TIM4_Init(void)
 }
 
 /**
+  * @brief TIM5 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM5_Init(void)
+{
+
+  /* USER CODE BEGIN TIM5_Init 0 */
+
+  /* USER CODE END TIM5_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM5_Init 1 */
+  //Prescaler  of 41999 = Nmax of 2000
+  /* USER CODE END TIM5_Init 1 */
+  htim5.Instance = TIM5;
+  htim5.Init.Prescaler = 41999;
+  htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim5.Init.Period = 4294967295;
+  htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim5) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim5, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim5, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM5_Init 2 */
+
+  /* USER CODE END TIM5_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -539,7 +593,25 @@ void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
 			} else{
 				HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
 			}
-			phase = phase == 1 ? 0: 1;
+			phase ^= 1;
+		} else if(option == 2){
+			if (curr_bit == 0) { //0
+				if (phase == 0) {
+					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+				} else {
+					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+				}
+			} else{ //1
+				if (phase == 0) {
+					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+				} else {
+					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+				}
+			}
+			if(phase == 1){
+				curr_bit ^= 1;
+			}
+			phase ^= 1;
 		} else if(curr_index < size){
 			if(phase == 0){
 				if((( ((uint8_t)curr_char) >>(7-curr_bit)) & 1) == 1){
@@ -559,7 +631,7 @@ void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
 				curr_bit = 0;
 				curr_index++;
 			}
-			phase = phase == 1 ? 0: 1;
+			phase ^= 1;
 			curr_char = input[curr_index];
 			if(curr_index >= size){
 				HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET TO IDLE
@@ -567,7 +639,15 @@ void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
 			}
 		}
 	}
-
+}
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+	if(htim->Instance == TIM5) {
+		phase = 0;
+		curr_bit = 0;
+		curr_index = 0;
+		curr_char = input[curr_index];
+		HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
+	}
 }
 /* USER CODE END 4 */
 
