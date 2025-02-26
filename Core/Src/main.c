@@ -75,6 +75,7 @@ uint8_t prev_level = 1;
 uint32_t last_edge = 0;
 bool first_edge = true;
 bool print_msg = false;
+bool tx_failed = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -139,7 +140,7 @@ int main(void)
   MX_TIM4_Init();
   MX_TIM3_Init();
   MX_TIM2_Init();
-  //MX_TIM5_Init();
+  MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
 
   curr_state = IDLE;
@@ -150,6 +151,7 @@ int main(void)
   scanf("%d", &option);
   srand(HAL_GetTick());
   //HAL_TIM_Base_Stop(&htim5);
+  HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
   if (option == 6) {
 	  	printf("Enter Address:\n");
 	  	uint8_t dest_addr;
@@ -170,12 +172,14 @@ int main(void)
 		input[6+size] == 0x00;
 	} else if(!(option == 1 || option == 2 || option == 4)){
 		printf("Enter Message:\n");
-		scanf("%s", &input);
+		scanf(" %[^\n]", &input);
 		size = strlen(input);
 		curr_index = 0;
 		curr_char = input[curr_index];
   }
-  HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
+  if(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6) == GPIO_PIN_RESET){
+  	  curr_state = COLLISION;
+   }
   HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
   HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
   /* USER CODE END 2 */
@@ -208,6 +212,9 @@ int main(void)
 				curr_char = input[curr_index];
 				HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
 			}
+			if(option == 6 && tx_failed){
+
+			}
 			HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
 		  	HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_RESET);
 		  	HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
@@ -218,9 +225,13 @@ int main(void)
 		  	HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_RESET);
 			break;
 		case COLLISION:
-			HAL_TIM_OC_Stop(&htim3, TIM_CHANNEL_1);
-			TIM5->ARR = (rand() % NMAX) + 1;
-			HAL_TIM_Base_Start_IT(&htim5);
+			if(option == 6 && curr_index < 6 + size){
+				tx_failed = true;
+				HAL_TIM_OC_Stop(&htim3, TIM_CHANNEL_1);
+				TIM5->ARR = (rand() % NMAX) + 1;
+				TIM5->EGR |= 0x1;
+				HAL_TIM_Base_Start_IT(&htim5);
+			}
 			HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_SET);
 		  	HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_RESET);
 		  	HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
@@ -579,6 +590,9 @@ void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef * htim){
 		TIM4->CNT = temp;
 		HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_2);
 	    curr_state = BUSY;
+	    HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_SET);
+	    HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_RESET);
+	    HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_RESET);
 	}
 	if (htim->Instance == TIM2) {
 			uint32_t curr_edge = TIM2->CCR1;
@@ -615,8 +629,14 @@ void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
 	if(htim->Instance == TIM4) {
 		if(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6) == GPIO_PIN_SET){
 			curr_state = IDLE;
+			HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
 		} else{
 			curr_state = COLLISION;
+			HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
 		}
 	}
 	if(htim->Instance == TIM3){
@@ -669,17 +689,25 @@ void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
 			if((option == 6 && curr_index >= 6 + size)||(option != 6 && curr_index >= size)){
 				HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET TO IDLE
 				HAL_TIM_OC_Stop(&htim3, TIM_CHANNEL_1);
+				tx_failed = false;
 			}
 		}
 	}
 }
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 	if(htim->Instance == TIM5) {
-		phase = 0;
-		curr_bit = 0;
-		curr_index = 0;
-		curr_char = input[curr_index];
-		HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
+		if (tx_failed && curr_state == IDLE) {
+			phase = 0;
+			curr_bit = 0;
+			curr_index = 0;
+			curr_char = input[curr_index];
+			HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
+			tx_failed = false;
+		} else{
+			TIM5->ARR = (rand() % NMAX) + 1;
+			TIM5->EGR |= 0x1;
+			HAL_TIM_Base_Start_IT(&htim5);
+		}
 	}
 }
 /* USER CODE END 4 */
