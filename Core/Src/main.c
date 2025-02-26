@@ -156,7 +156,7 @@ int main(void)
 	  	scanf("%d", &dest_addr);
 		printf("Enter Message:\n");
 		char msg[LEN];
-		scanf("%s", &msg);
+		scanf(" %[^\n]", &msg);
 		size = strlen(msg);
 		input[0] = 0x55;
 		input[1] = MY_ADDR;
