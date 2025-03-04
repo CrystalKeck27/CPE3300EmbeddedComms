@@ -43,6 +43,10 @@ typedef enum
 #define LEN 255
 #define NMAX 2000
 #define MY_ADDR 0x28
+/* PB6 - Channel Monitor
+ * PA5 - Transmitter
+ * PA0 - Receiver
+ */
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -69,13 +73,15 @@ uint32_t rec_index = 0;
 uint8_t size = 0;
 char input[261];
 char msg_buff[LEN] = "";
-uint8_t option;
+char option;
 uint8_t curr_level;
 uint8_t prev_level = 1;
 uint32_t last_edge = 0;
 bool first_edge = true;
 bool print_msg = false;
 bool tx_failed = false;
+bool start = false;
+uint8_t attempts = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -87,20 +93,20 @@ static void MX_TIM3_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
-uint8_t gencrc(uint8_t *data, uint32_t len) {
-	uint8_t crc = 0xff;
-	uint32_t i, j;
-	for (i = 0; i < len; i++) {
-		crc ^= data[i];
-		for (j = 0; j < 8; j++) {
-			if ((crc & 0x80) != 0)
-				crc = (uint8_t) ((crc << 1) ^ 0x31);
-			else
-				crc <<= 1;
-		}
-	}
-	return crc;
-}
+//uint8_t gencrc(uint8_t *data, uint32_t len) {
+//	uint8_t crc = 0xff;
+//	uint32_t i, j;
+//	for (i = 0; i < len; i++) {
+//		crc ^= data[i];
+//		for (j = 0; j < 8; j++) {
+//			if ((crc & 0x80) != 0)
+//				crc = (uint8_t) ((crc << 1) ^ 0x31);
+//			else
+//				crc <<= 1;
+//		}
+//	}
+//	return crc;
+//}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -146,42 +152,37 @@ int main(void)
   curr_state = IDLE;
   HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET IDLE
-  printf("Enter an option\n0: Repeating Message\n1: 0x00\n2: 0x55\n3: Single Message\n4: Receive Mode\n5: T-R\n6: Loopback Test\n");
- // HAL_TIM_Base_Start(&htim5); // for random number generation
-  scanf("%d", &option);
+  printf("List of commands\n"
+		  "t - Transmit Message\n"
+		  "r - Check for received message\n");
   srand(HAL_GetTick());
-  //HAL_TIM_Base_Stop(&htim5);
   HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
-  if (option == 6) {
-	  	printf("Enter Address:\n");
-	  	uint8_t dest_addr;
-	  	scanf("%d", &dest_addr);
-		printf("Enter Message:\n");
-		char msg[LEN];
-		scanf(" %[^\n]", &msg);
-		size = strlen(msg);
-		input[0] = 0x55;
-		input[1] = MY_ADDR;
-		input[2] = dest_addr;
-		input[3] = size;
-		input[4] = 0x00;
-		for (uint8_t i = 0; i < size; i++) {
-			input[5 + i] = msg[i];
-		}
-		input[5+size] = 0xAA;
-		input[6+size] == 0x00;
-	} else if(!(option == 1 || option == 2 || option == 4)){
-		printf("Enter Message:\n");
-		scanf(" %[^\n]", &input);
-		size = strlen(input);
-		curr_index = 0;
-		curr_char = input[curr_index];
-  }
-  if(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6) == GPIO_PIN_RESET){
-  	  curr_state = COLLISION;
-   }
+  printf("Enter Address:\n");
+  			uint8_t dest_addr;
+  			scanf("%d", &dest_addr);
+  			printf("Enter Message:\n");
+  			char msg[LEN];
+  			scanf(" %[^\n]", &msg);
+  			size = strlen(msg);
+  			input[0] = 0x55;
+  			input[1] = MY_ADDR;
+  			input[2] = dest_addr;
+  			input[3] = size;
+  			input[4] = 0x00;
+  			for (uint8_t i = 0; i < size; i++) {
+  				input[5 + i] = msg[i];
+  			}
+  			input[5 + size] = 0xAA;
+
+  			phase = 0;
+  			curr_bit = 0;
+  			curr_index = 0;
+  			curr_char = input[curr_index];
+  			if(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6) == GPIO_PIN_RESET){
+  			  			  	  curr_state = COLLISION;
+  			  			}
+  			HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
   HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
-  HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -191,9 +192,39 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  if(option == 4 || option == 5 || option == 6){
+	  	printf("Enter cmd\n");
+	    scanf("%c", &option);
+	    switch (option) {
+		case 't':
+			printf("Enter Address:\n");
+			uint8_t dest_addr;
+			scanf("%d", &dest_addr);
+			printf("Enter Message:\n");
+			char msg[LEN];
+			scanf(" %[^\n]", &msg);
+			size = strlen(msg);
+			input[0] = 0x55;
+			input[1] = MY_ADDR;
+			input[2] = dest_addr;
+			input[3] = size;
+			input[4] = 0x00;
+			for (uint8_t i = 0; i < size; i++) {
+				input[5 + i] = msg[i];
+			}
+			input[5 + size] = 0xAA;
+			if(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6) == GPIO_PIN_RESET){
+			  	  curr_state = COLLISION;
+			}
+			phase = 0;
+			curr_bit = 0;
+			curr_index = 0;
+			curr_char = input[curr_index];
+			start = true;
+			break;
+		case 'r':
 			if (print_msg) {
-				for(uint16_t i = 0; i < rec_index; i++){
+				printf("Received message from %x: ", msg_buff[1]);
+				for (uint16_t i = 5; i < rec_index - 1; i++) {
 					printf("%c", msg_buff[i]);
 				}
 				printf("\n");
@@ -204,37 +235,40 @@ int main(void)
 				bool first_edge = true;
 				memset(msg_buff, 0, LEN);
 			}
-	  }
+			break;
+		default:
+			break;
+		}
 		switch (curr_state) {
 		case IDLE:
-			if(option == 0 && curr_index >= size){
-				curr_index = 0;
-				curr_char = input[curr_index];
-				HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
-			}
-			if(option == 6 && tx_failed){
-
-			}
+//			if (start) {
+//				HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
+//				start = false;
+//			}
 			HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_SET);
-		  	HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_RESET);
-		  	HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
 			break;
 		case BUSY:
 			HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_SET);
-		  	HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_RESET);
-		  	HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_RESET);
 			break;
 		case COLLISION:
-			if(option == 6 && curr_index < 6 + size){
-				tx_failed = true;
+			if (curr_index < 6 + size && attempts <= 10) {
 				HAL_TIM_OC_Stop(&htim3, TIM_CHANNEL_1);
+				phase = 0;
+				curr_bit = 0;
+				curr_index = 0;
+				curr_char = input[curr_index];
+				tx_failed = true;
 				TIM5->ARR = (rand() % NMAX) + 1;
 				TIM5->EGR |= 0x1;
 				HAL_TIM_Base_Start_IT(&htim5);
 			}
 			HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_SET);
-		  	HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_RESET);
-		  	HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
 			break;
 		default:
 			break;
@@ -608,9 +642,6 @@ void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef * htim){
 				}
 				rec_bit++;
 				if (rec_bit > 7) {
-					if(option != 6){
-						print_msg = true;
-					}
 					rec_bit = 0;
 					rec_index++;
 				}
@@ -619,7 +650,7 @@ void HAL_TIM_IC_CaptureCallback (TIM_HandleTypeDef * htim){
 			} else {
 				prev_level = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
 			}
-			if (option == 6 && rec_index > 2 && (msg_buff[2] == MY_ADDR || msg_buff[2] == 0xFF)  && (rec_index >= 6 + msg_buff[3])) {
+			if (rec_index > 2 && (msg_buff[2] == MY_ADDR || msg_buff[2] == 0xFF)  && (rec_index >= 6 + msg_buff[3])) {
 				print_msg = true;
 			}
 	}
@@ -634,38 +665,19 @@ void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
 			HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
 		} else{
 			curr_state = COLLISION;
+			HAL_TIM_OC_Stop(&htim3, TIM_CHANNEL_1);
+			phase = 0;
+			curr_bit = 0;
+			curr_index = 0;
+			curr_char = input[curr_index];
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
 			HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_SET);
 			HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_RESET);
 			HAL_GPIO_WritePin(BUSY_LED_GPIO_Port, BUSY_LED_Pin, GPIO_PIN_RESET);
 		}
 	}
 	if(htim->Instance == TIM3){
-		if(option == 1){
-			if(phase == 0){
-				HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
-			} else{
-				HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
-			}
-			phase ^= 1;
-		} else if(option == 2){
-			if (curr_bit == 0) { //0
-				if (phase == 0) {
-					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
-				} else {
-					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
-				}
-			} else{ //1
-				if (phase == 0) {
-					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
-				} else {
-					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
-				}
-			}
-			if(phase == 1){
-				curr_bit ^= 1;
-			}
-			phase ^= 1;
-		} else if((option == 6 && curr_index < 6+size)||(option != 6 && curr_index < size)){
+		if(!tx_failed && curr_state != COLLISION && curr_index < 6+ size){
 			if(phase == 0){
 				if((( ((uint8_t)curr_char) >>(7-curr_bit)) & 1) == 1){
 					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
@@ -686,28 +698,27 @@ void HAL_TIM_OC_DelayElapsedCallback (TIM_HandleTypeDef * htim){
 			}
 			phase ^= 1;
 			curr_char = input[curr_index];
-			if((option == 6 && curr_index >= 6 + size)||(option != 6 && curr_index >= size)){
+			if(curr_index >= 6 + size){
 				HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //SET TO IDLE
 				HAL_TIM_OC_Stop(&htim3, TIM_CHANNEL_1);
 				tx_failed = false;
+				attempts = 0;
 			}
 		}
 	}
 }
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 	if(htim->Instance == TIM5) {
-		if (tx_failed && curr_state == IDLE) {
-			phase = 0;
-			curr_bit = 0;
-			curr_index = 0;
-			curr_char = input[curr_index];
+		if (tx_failed && curr_state == IDLE && attempts <= 10) {
 			HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
 			tx_failed = false;
-		} else{
-			TIM5->ARR = (rand() % NMAX) + 1;
-			TIM5->EGR |= 0x1;
-			HAL_TIM_Base_Start_IT(&htim5);
+			attempts++;
 		}
+//		else{
+//			TIM5->ARR = (rand() % NMAX) + 1;
+//			TIM5->EGR |= 0x1;
+//			HAL_TIM_Base_Start_IT(&htim5);
+//		}
 	}
 }
 /* USER CODE END 4 */
