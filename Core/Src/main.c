@@ -71,7 +71,7 @@ uint8_t curr_bit = 0;
 uint8_t rec_bit = 0;
 uint32_t rec_index = 0;
 uint8_t size = 0;
-char input[261];
+char input[261] = "";
 char msg_buff[LEN] = "";
 char option;
 uint8_t curr_level;
@@ -157,31 +157,6 @@ int main(void)
 		  "r - Check for received message\n");
   srand(HAL_GetTick());
   HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
-  printf("Enter Address:\n");
-  			uint8_t dest_addr;
-  			scanf("%d", &dest_addr);
-  			printf("Enter Message:\n");
-  			char msg[LEN];
-  			scanf(" %[^\n]", &msg);
-  			size = strlen(msg);
-  			input[0] = 0x55;
-  			input[1] = MY_ADDR;
-  			input[2] = dest_addr;
-  			input[3] = size;
-  			input[4] = 0x00;
-  			for (uint8_t i = 0; i < size; i++) {
-  				input[5 + i] = msg[i];
-  			}
-  			input[5 + size] = 0xAA;
-
-  			phase = 0;
-  			curr_bit = 0;
-  			curr_index = 0;
-  			curr_char = input[curr_index];
-  			if(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6) == GPIO_PIN_RESET){
-  			  			  	  curr_state = COLLISION;
-  			  			}
-  			HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
   HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
   /* USER CODE END 2 */
 
@@ -193,12 +168,12 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	  	printf("Enter cmd\n");
-	    scanf("%c", &option);
+	    scanf(" %c", &option);
 	    switch (option) {
 		case 't':
 			printf("Enter Address:\n");
 			uint8_t dest_addr;
-			scanf("%d", &dest_addr);
+			scanf("% d", &dest_addr);
 			printf("Enter Message:\n");
 			char msg[LEN];
 			scanf(" %[^\n]", &msg);
@@ -219,22 +194,24 @@ int main(void)
 			curr_bit = 0;
 			curr_index = 0;
 			curr_char = input[curr_index];
-			start = true;
+			HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
 			break;
 		case 'r':
 			if (print_msg) {
-				printf("Received message from %x: ", msg_buff[1]);
+				printf("Received message from 0x%02X: ", msg_buff[1]);
 				for (uint16_t i = 5; i < rec_index - 1; i++) {
 					printf("%c", msg_buff[i]);
 				}
 				printf("\n");
-				print_msg = false;
-				rec_index = 0;
-				rec_bit = 0;
-				uint8_t prev_level = 1;
-				bool first_edge = true;
-				memset(msg_buff, 0, LEN);
+			} else{
+				printf("No received messages\n");
 			}
+			print_msg = false;
+			rec_index = 0;
+			rec_bit = 0;
+			uint8_t prev_level = 1;
+			bool first_edge = true;
+			memset(msg_buff, 0, LEN);
 			break;
 		default:
 			break;
@@ -265,6 +242,14 @@ int main(void)
 				TIM5->ARR = (rand() % NMAX) + 1;
 				TIM5->EGR |= 0x1;
 				HAL_TIM_Base_Start_IT(&htim5);
+				attempts++;
+			}
+			if(attempts > 10){
+				HAL_TIM_OC_Stop(&htim3, TIM_CHANNEL_1);
+				phase = 0;
+				curr_bit = 0;
+				curr_index = 0;
+				curr_char = input[curr_index];
 			}
 			HAL_GPIO_WritePin(COLL_LED_GPIO_Port, COLL_LED_Pin, GPIO_PIN_SET);
 			HAL_GPIO_WritePin(IDLE_LED_GPIO_Port, IDLE_LED_Pin, GPIO_PIN_RESET);
@@ -712,13 +697,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 		if (tx_failed && curr_state == IDLE && attempts <= 10) {
 			HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
 			tx_failed = false;
-			attempts++;
 		}
-//		else{
-//			TIM5->ARR = (rand() % NMAX) + 1;
-//			TIM5->EGR |= 0x1;
-//			HAL_TIM_Base_Start_IT(&htim5);
-//		}
 	}
 }
 /* USER CODE END 4 */
